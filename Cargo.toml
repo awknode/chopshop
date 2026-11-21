@@ -1,0 +1,27 @@
+[package]
+name = "chop_shop"
+version = "0.3.0"
+edition = "2021"
+authors = ["awk studios"]
+description = "Bass fattening rack: PHAT, OTT, BUZZ, VOWEL, CHAOS, WIDE, CLIP"
+
+[workspace]
+members = ["xtask"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+serde_json = "1"
+realfft = "3"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
+# AWKNODE: patched nih-plug (stalled-audio fallback), mounted at /nih-plug-awk by build.sh
+[patch."https://github.com/robbert-vdh/nih-plug.git"]
+nih_plug = { path = "/nih-plug-awk" }
+nih_plug_egui = { path = "/nih-plug-awk/nih_plug_egui" }

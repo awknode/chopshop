@@ -1,0 +1,9 @@
+target/
+irtest/
+/target/
+/target-*/
+/trash/
+/irtest/
+*.bak
+*.bak.*
+.cargo-ok
