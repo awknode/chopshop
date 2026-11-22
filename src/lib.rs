@@ -666,9 +666,13 @@ impl ChopShop {
         // MATCH LEVEL: rack output follows the input loudness.
         let lin = 0.5 * (l * l + r * r);
         let lout = 0.5 * (a * a + b * b);
-        self.env_in = lin + (self.env_in - lin) * v.lvl_c;
-        self.env_out = lout + (self.env_out - lout) * v.lvl_c;
-        let target = if on.matching && self.env_out > 1e-9 && self.env_in > 1e-9 { (self.env_in / self.env_out).sqrt().clamp(0.125, 8.0) } else { 1.0 };
+        // (frozen while the input is silent: in a gap it used to fall back to unity, so the
+        // first hit after the gap came out at a different level from the rest)
+        if lin > 1e-8 {
+            self.env_in = lin + (self.env_in - lin) * v.lvl_c;
+            self.env_out = lout + (self.env_out - lout) * v.lvl_c;
+        }
+        let target = if !on.matching { 1.0 } else if self.env_out > 1e-9 && self.env_in > 1e-9 { (self.env_in / self.env_out).sqrt().clamp(0.125, 8.0) } else { self.auto };
         self.auto = target + (self.auto - target) * v.lvl_c;
         a *= self.auto;
         b *= self.auto;
