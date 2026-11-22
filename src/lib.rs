@@ -7,8 +7,8 @@
 //! OVERSAMPLING (OFF/2x/4x/8x) runs the whole chain, dry/wet MIX included, at the
 //! higher rate so PHAT, BUZZ and CLIP don't alias. Header power = host bypass.
 
-use nih_plug::prelude::*;
-use nih_plug_egui::EguiState;
+use nice_plug::prelude::*;
+use nice_plug_egui::EguiEditorState;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -16,7 +16,9 @@ use std::sync::Arc;
 mod analyzer;
 mod awk_ui;
 pub mod dsp;
+
 mod editor;
+mod nice_app;
 mod oversample;
 mod presets;
 #[cfg(test)]
@@ -61,8 +63,8 @@ fn hz(name: &str, def: f32, min: f32, max: f32) -> FloatParam {
 
 #[derive(Params)]
 pub struct ChopParams {
-    #[persist = "editor-state-v2"]
-    pub editor_state: Arc<EguiState>,
+    /// window size (nice-plug keeps hosts in charge of it; not persisted)
+    pub editor_state: Arc<EguiEditorState>,
 
     #[id = "in"]
     pub input: FloatParam,
@@ -190,7 +192,7 @@ pub struct ChopParams {
 impl Default for ChopParams {
     fn default() -> Self {
         Self {
-            editor_state: EguiState::from_size(editor::WIDTH, editor::HEIGHT),
+            editor_state: EguiEditorState::from_size(nice_plug::editor::dpi::LogicalSize::new((editor::WIDTH) as f64, (editor::HEIGHT) as f64), 1.0),
             input: db_param("Input", 0.0, -24.0, 24.0),
             low_keep: FloatParam::new("Low Keep", 20.0, FloatRange::Skewed { min: 20.0, max: 300.0, factor: FloatRange::skew_factor(-1.0) })
                 .with_smoother(SmoothingStyle::Logarithmic(30.0))
@@ -401,6 +403,7 @@ impl Plugin for ChopShop {
         AudioIOLayout { main_input_channels: NonZeroU32::new(2), main_output_channels: NonZeroU32::new(2), ..AudioIOLayout::const_default() },
         AudioIOLayout { main_input_channels: NonZeroU32::new(1), main_output_channels: NonZeroU32::new(1), ..AudioIOLayout::const_default() },
     ];
+    type Editor = crate::nice_app::AwkEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -408,11 +411,11 @@ impl Plugin for ChopShop {
         self.params.clone()
     }
 
-    fn editor(&mut self, _a: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+    fn editor(&mut self, _a: AsyncExecutor<Self>) -> Option<Self::Editor> {
         editor::create(self.params.clone(), self.shared.clone())
     }
 
-    fn initialize(&mut self, _l: &AudioIOLayout, cfg: &BufferConfig, ctx: &mut impl InitContext<Self>) -> bool {
+    fn activate(&mut self, _l: &AudioIOLayout, cfg: &BufferConfig, ctx: &mut impl ActivateContext<Self>) -> bool {
         self.sr = cfg.sample_rate;
         self.osf = oversample::factor_for(self.params.os.value());
         self.rebuild();
@@ -696,7 +699,7 @@ impl Vst3Plugin for ChopShop {
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[Vst3SubCategory::Fx, Vst3SubCategory::Distortion];
 }
 
-nih_export_vst3!(ChopShop);
+nice_export_vst3!(ChopShop);
 
 #[cfg(test)]
 mod tests {

@@ -8,9 +8,9 @@ use crate::analyzer::Analyzer;
 use crate::awk_ui::*;
 use crate::presets::PresetBar;
 use crate::{ChopParams, Shared};
-use nih_plug::prelude::*;
-use nih_plug_egui::create_egui_editor;
-use nih_plug_egui::egui::{self, pos2, vec2, Align2, Color32, Pos2, Rect};
+use nice_plug::prelude::*;
+use nice_plug_egui::create_egui_editor;
+use egui::{pos2, vec2, Align2, Color32, Pos2, Rect};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -29,23 +29,26 @@ pub(crate) fn new_st(dir: &'static str) -> St {
     St { presets: PresetBar::new(dir), skin: Skin::new(Look::Blackface, ACC, "CHOPSHOP", env!("CARGO_PKG_VERSION"), ""), an: Analyzer::default() }
 }
 
-pub fn create(params: Arc<ChopParams>, shared: Arc<Shared>) -> Option<Box<dyn Editor>> {
+pub fn create(params: Arc<ChopParams>, shared: Arc<Shared>) -> Option<crate::nice_app::AwkEditor> {
     let state = params.editor_state.clone();
     let st = new_st("ChopShop");
-    create_egui_editor(
-        state,
-        st,
-        |ctx, _| install_fonts(ctx),
-        move |ctx, setter, st| frame(ctx, setter, st, params.as_ref(), shared.as_ref()),
-    )
+    create_egui_editor(state, nice_plug_egui::RepaintNotifier::new(), nice_plug_egui::EguiNiceSettings::default(), crate::nice_app::AwkApp::new(install_fonts, {
+        let mut __st = st;
+        Box::new(move |ctx: &mut egui::Ui, setter: &ParamSetter| {
+            let st = &mut __st;
+            frame(ctx, setter, st, params.as_ref(), shared.as_ref())
+        })
+    }))
 }
 
-pub(crate) fn frame(ctx: &egui::Context, setter: &ParamSetter, st: &mut St, params: &ChopParams, shared: &Shared) {
+pub(crate) fn frame(root: &mut egui::Ui, setter: &ParamSetter, st: &mut St, params: &ChopParams, shared: &Shared) {
+    let ctx_owned = root.ctx().clone();
+    let ctx = &ctx_owned;
     ctx.request_repaint_after(std::time::Duration::from_millis(33));
     st.skin.begin(ctx);
     st.an.update(&shared.spec);
     let p = params;
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(rgb(0x1b, 0x1c, 0x1f))).show(ctx, |ui| {
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(rgb(0x1b, 0x1c, 0x1f))).show(root, |ui| {
         let whole = ui.max_rect();
         st.skin.background(ui.painter(), whole);
         let full = st.presets.strip(ui, setter, params, whole, &st.skin, &p.mix, &p.bypass);
@@ -218,7 +221,7 @@ fn draw_screen(ui: &mut egui::Ui, setter: &ParamSetter, painter: &egui::Painter,
         let box_r = Rect::from_center_size(pos2(cx, top + 24.0), vec2(108.0, 42.0));
         // drag a band's box up / down = that band's output gain (double-click resets)
         let gp = gains[i];
-        let resp = ui.interact(box_r, ui.id().with(("bandgain", i)), egui::Sense::click_and_drag()).on_hover_text("Drag up / down: this band's output gain. Double-click: 0 dB");
+        let resp = ui.interact(box_r, ui.scope_id().with(("bandgain", i)), egui::Sense::click_and_drag()).on_hover_text("Drag up / down: this band's output gain. Double-click: 0 dB");
         if resp.double_clicked() {
             setter.begin_set_parameter(gp);
             setter.set_parameter(gp, 0.0);

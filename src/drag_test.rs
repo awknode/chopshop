@@ -2,16 +2,16 @@
 use crate::awk_ui::{install_fonts, Look, Skin};
 use crate::presets::PresetBar;
 use crate::ChopParams;
-use nih_plug::context::gui::GuiContext;
-use nih_plug::prelude::*;
-use nih_plug::wrapper::state::PluginState;
-use nih_plug_egui::egui::{self, Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
+use nice_plug::context::gui::GuiContextInner;
+use nice_plug::prelude::*;
+use nice_plug::plugin::PluginState;
+use egui::{Event, Modifiers, PointerButton, Pos2, RawInput, Rect, Vec2};
 use std::sync::Mutex;
 
 struct Mock(Mutex<Vec<String>>);
-impl GuiContext for Mock {
+impl GuiContextInner for Mock {
     fn plugin_api(&self) -> PluginApi { PluginApi::Vst3 }
-    fn request_resize(&self) -> bool { true }
+    fn request_restart(&self) {}
     unsafe fn raw_begin_set_parameter(&self, _p: ParamPtr) { self.0.lock().unwrap().push("begin".into()); }
     unsafe fn raw_set_parameter_normalized(&self, _p: ParamPtr, n: f32) { self.0.lock().unwrap().push(format!("set {n:.3}")); }
     unsafe fn raw_end_set_parameter(&self, _p: ParamPtr) { self.0.lock().unwrap().push("end".into()); }
@@ -36,7 +36,7 @@ fn drag_knob(with_strip: bool) -> Vec<String> {
     events.push(vec![]);
     for (i, ev) in events.into_iter().enumerate() {
         let raw = RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(960.0, 744.0))), time: Some(i as f64 * 0.016), events: ev, ..Default::default() };
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             skin.begin(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
                 if with_strip {
@@ -83,7 +83,7 @@ fn preset_load_never_blocks() {
             _ => vec![],
         };
         let raw = RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(960.0, 744.0))), time: Some(i as f64 * 0.016), events: ev, ..Default::default() };
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let whole = ui.max_rect();
                 let _ = bar.strip(ui, &setter, &params, whole, &skin, &params.mix, &params.bypass);
@@ -118,7 +118,7 @@ fn save_as_goes_to_user_and_favourites() {
     let save_as = Pos2::new(w - 288.0, 22.0);
     let mut frame = |ev: Vec<Event>, i: usize| {
         let raw = RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(w, 744.0))), time: Some(i as f64 * 0.016), events: ev, ..Default::default() };
-        let _ = ctx.run(raw, |ctx| {
+        let _ = ctx.run_ui(raw, |ctx| {
             skin.begin(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
                 let _ = bar.strip(ui, &setter, &params, ui.max_rect(), &skin, &params.mix, &params.bypass);

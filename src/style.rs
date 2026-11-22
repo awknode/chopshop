@@ -1,8 +1,8 @@
 //! Awknode street style, shared look with KickNull (copied from KickNull's editor).
 //! Concrete wall, spray-paint tag, caution tape, tape-label knobs, sticker toggles.
 
-use nih_plug::prelude::*;
-use nih_plug_egui::egui::{
+use nice_plug::prelude::*;
+use egui::{
     self, epaint::TextShape, Align2, Color32, FontId, FontFamily, Mesh, Pos2, Rect, Sense, Shape, Stroke, Vec2,
 };
 use std::f32::consts::PI;
@@ -184,7 +184,7 @@ pub fn knob(ui: &mut egui::Ui, setter: &ParamSetter, cell: Rect, label: &str, pa
     let radius = 24.0;
     let center = Pos2::new(cell.center().x, cell.top() + 40.0);
     let hit = Rect::from_center_size(center, Vec2::splat(radius * 2.4));
-    let id = ui.id().with(label);
+    let id = ui.scope_id().with(label);
     let resp = ui.interact(hit, id, Sense::click_and_drag());
     // Stepped knobs (LENGTH) move one step per scroll notch.
     let step = param.step_count().map(|n| 1.0 / n.max(1) as f32).unwrap_or(0.01);
@@ -217,7 +217,7 @@ pub fn knob(ui: &mut egui::Ui, setter: &ParamSetter, cell: Rect, label: &str, pa
             setter.end_set_parameter(param);
         }
         if resp.hovered() {
-            let scroll = ui.input(|i| i.raw_scroll_delta.y);
+            let scroll = ui.input(|i| i.events.iter().map(|e| if let egui::Event::MouseWheel { delta, .. } = e { delta.y } else { 0.0 }).sum::<f32>());
             if scroll != 0.0 {
                 let n = (param.unmodulated_normalized_value() + scroll.signum() * step).clamp(0.0, 1.0);
                 setter.begin_set_parameter(param);
@@ -287,7 +287,7 @@ pub fn bool_toggle(
     let p = ui.painter();
     let galley = p.layout_no_wrap(text.to_string(), block(12.0), INK);
     let r = Rect::from_min_size(at, galley.size() + Vec2::new(14.0, 4.0));
-    let resp = ui.interact(r, ui.id().with(id), Sense::click());
+    let resp = ui.interact(r, ui.scope_id().with(id), Sense::click());
     if resp.clicked() {
         setter.begin_set_parameter(param);
         setter.set_parameter(param, !on);
