@@ -32,6 +32,7 @@ pub(crate) fn new_st(dir: &'static str) -> St {
 pub fn create(params: Arc<ChopParams>, shared: Arc<Shared>) -> Option<crate::nice_app::AwkEditor> {
     let state = params.editor_state.clone();
     let st = new_st("ChopShop");
+    crate::presets::apply_scale(&state, &params.ui_scale);
     create_egui_editor(state, nice_plug_egui::RepaintNotifier::new(), nice_plug_egui::EguiNiceSettings::default(), crate::nice_app::AwkApp::new(install_fonts, {
         let mut __st = st;
         Box::new(move |ctx: &mut egui::Ui, setter: &ParamSetter| {
@@ -51,7 +52,7 @@ pub(crate) fn frame(root: &mut egui::Ui, setter: &ParamSetter, st: &mut St, para
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(rgb(0x1b, 0x1c, 0x1f))).show(root, |ui| {
         let whole = ui.max_rect();
         st.skin.background(ui.painter(), whole);
-        let full = st.presets.strip(ui, setter, params, whole, &st.skin, &p.mix, &p.bypass);
+        let full = st.presets.strip(ui, setter, params, whole, &st.skin, &p.mix, &p.bypass, &p.ui_scale);
         let painter = ui.painter().clone();
         let (l, r, t) = (full.left(), full.right(), full.top());
         let foot = Rect::from_min_max(pos2(l, full.bottom() - 30.0), full.right_bottom());
@@ -122,7 +123,7 @@ pub(crate) fn frame(root: &mut egui::Ui, setter: &ParamSetter, st: &mut St, para
                 let row = k / 2;
                 let last_single = k == small.len() - 1 && small.len() % 2 == 1;
                 let x = if last_single { cx } else if k % 2 == 0 { cx - 30.0 } else { cx + 30.0 };
-                let y = s.top() + 186.0 + row as f32 * 67.0;
+                let y = s.top() + 176.0 + row as f32 * 80.0;
                 skin.knob(ui, setter, pos2(x, y), 15.0, lab_s, *prm, false, *bip, !on);
             }
             if *title == "CHAOS" {
@@ -260,7 +261,7 @@ fn draw_screen(ui: &mut egui::Ui, setter: &ParamSetter, painter: &egui::Painter,
 /// CHAOS: live value + REROLL (new random pattern, shows the seed).
 fn chaos_extras(ui: &mut egui::Ui, setter: &ParamSetter, skin: &Skin, s: Rect, p: &ChopParams, shared: &Shared) {
     let painter = ui.painter().clone();
-    let y = s.top() + 186.0 + 2.0 * 67.0 - 6.0;
+    let y = s.top() + 176.0 + 2.0 * 80.0 - 6.0;
     let bar = Rect::from_center_size(pos2(s.center().x, y), vec2(s.width() - 28.0, 8.0));
     painter.rect_filled(bar, 2.0, Color32::from_black_alpha(170));
     line(&painter, pos2(bar.center().x, bar.top() - 2.0), pos2(bar.center().x, bar.bottom() + 2.0), skin.text_faint(), 1.0);

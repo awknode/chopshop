@@ -287,8 +287,13 @@ pub struct Ott {
 const OTT_FLOOR: f32 = -64.0;
 
 /// Thresholds per band (low, mid, high): (downward above, upward below).
-const OTT_DOWN: [f32; 3] = [-28.0, -30.0, -32.0];
-const OTT_UP: [f32; 3] = [-40.0, -41.0, -42.0];
+/// Close together, like the original OTT: loud parts get pushed down, everything
+/// under the UP threshold gets pulled up, so UP is audible on normal-level material.
+const OTT_DOWN: [f32; 3] = [-22.0, -24.0, -26.0];
+const OTT_UP: [f32; 3] = [-30.0, -32.0, -34.0];
+/// Ratios as gain-change slopes: 4:1 down, 3:1 up (66:1 flattened bass to mush).
+const OTT_DOWN_SLOPE: f32 = 1.0 - 1.0 / 4.0;
+const OTT_UP_SLOPE: f32 = 1.0 - 1.0 / 3.0;
 
 impl Ott {
     pub fn new(sr: f32) -> Self {
@@ -309,10 +314,15 @@ impl Ott {
         let (mr, hr) = self.x2[1].split(rr);
         let bands = [(ll, rl), (ml, mr), (hl, hr)];
         if (time - self.k_time).abs() > 1e-4 {
-            let scale = 0.1 + 2.9 * time * time;
+            // TIME: 0 = snappy (0.4 ms attack on the mids), 1 = slow and pumping (~10x the default)
+            let scale = 0.08 * 100f32.powf(time);
+            // 0.4.1 (bench vs SerumFX MultBand): attack 2..8 ms / release 80..180 ms let the upward
+            // lift from a note's tail carry into the next transient (+9 dB on its first ms) and the
+            // envelope lag kept squeezing the tails: a pluck's loud-vs-quiet gap went 22.3 -> 21.3 dB
+            // at 100% (Serum: ~12). Now 15 dB.
             for b in 0..3 {
                 // Lows slower, highs faster.
-                self.k[b] = [coef([8.0, 4.0, 2.0][b] * scale, sr), coef([180.0, 120.0, 80.0][b] * scale, sr)];
+                self.k[b] = [coef([1.0, 0.5, 0.25][b] * scale, sr), coef([40.0, 30.0, 20.0][b] * scale, sr)];
             }
             self.k_time = time;
         }
@@ -326,9 +336,9 @@ impl Ott {
             let db = 20.0 * (self.env[b] + 1e-9).log10();
             let mut g = 0.0;
             if db > OTT_DOWN[b] {
-                g -= (db - OTT_DOWN[b]) * (1.0 - 1.0 / 66.0) * down;
+                g -= (db - OTT_DOWN[b]) * OTT_DOWN_SLOPE * down;
             } else if db < OTT_UP[b] {
-                let lift = ((OTT_UP[b] - db) * (1.0 - 1.0 / 4.17) * up).min(24.0);
+                let lift = ((OTT_UP[b] - db) * OTT_UP_SLOPE * up).min(18.0);
                 g += lift * ((db - OTT_FLOOR) / 12.0).clamp(0.0, 1.0);
             }
             // gain down: at the attack speed; gain up: at the release speed
@@ -337,8 +347,9 @@ impl Ott {
             let g = self.gs[b];
             self.gr_db[b] = g;
             // OTT's own makeup so DEPTH 100% isn't a huge level drop.
-            let wet = db_to_gain(g + 10.0 + band_db[b]);
-            let gain = 1.0 + depth * amt[b] * (wet - 1.0);
+            let wet = db_to_gain(g + 6.0);
+            // band OUT is a plain level after the compression: works at any DEPTH / AMOUNT
+            let gain = (1.0 + depth * amt[b] * (wet - 1.0)) * db_to_gain(band_db[b]);
             out.0 += a * gain;
             out.1 += c * gain;
         }
@@ -408,7 +419,8 @@ impl Vowel {
             y += self.bp[k].tick(x).1 * self.g[k];
         }
         // Narrow bands lose level; make it back.
-        y * (1.6 + res * 2.4)
+        // (a bass loses most of its energy under the first formant: make up more)
+        y * (4.0 + res * 4.0)
     }
 }
 
@@ -633,5 +645,46 @@ mod phat_plus_tests {
         // everything up: bounded
         let mut p = PhatPlus::default();
         assert!(x.iter().map(|v| p.tick(*v * 2.0, 1.0, 1.0, 120.0, 40.0, 40.0, sr)).all(|v| v.is_finite() && v.abs() < 4.0));
+    }
+}
+
+#[cfg(test)]
+mod ott_bench {
+    use super::*;
+    /// OTT_PLUCK=1 cargo test --release --lib ott_pluck -- --nocapture
+    /// awk-bench "pluck": 110 Hz notes every 250 ms, 60 ms decay; loud = first 1/8, quiet = last half.
+    /// SerumFX MultBand at 100%: 22.3 -> ~12 dB. Static 1 kHz -42..0 -> -38..-22.
+    #[test]
+    fn ott_pluck() {
+        if std::env::var("OTT_PLUCK").is_err() {
+            return;
+        }
+        let sr = 48000.0;
+        for f in [110.0f32, 1000.0] {
+            for depth in [0.0f32, 0.5, 1.0] {
+                let mut o = Ott::new(sr);
+                let n = (sr * 2.0) as usize;
+                let per = (sr * 0.25) as usize;
+                let a = 10f32.powf(-18.0 / 20.0) * 2f32.sqrt() * 2.0;
+                let (mut x, mut y) = (vec![], vec![]);
+                for i in 0..n {
+                    let t = i as f32 / sr;
+                    let env = (-((i % per) as f32 / (sr * 0.06))).exp();
+                    let v = a * env * (std::f32::consts::TAU * f * t).sin();
+                    let (l, _) = o.tick(v, v, depth, 0.5, 1.0, 1.0, [0.0; 3], [1.0; 3], sr);
+                    x.push(v);
+                    y.push(l);
+                }
+                let lq = |s: &[f32]| {
+                    let (mut lo, mut qu, mut nl, mut nq) = (0.0f32, 0.0f32, 0, 0);
+                    for i in (sr * 0.5) as usize..n {
+                        let k = i % per;
+                        if k < per / 8 { lo += s[i] * s[i]; nl += 1 } else if k >= per / 2 { qu += s[i] * s[i]; nq += 1 }
+                    }
+                    10.0 * ((lo / nl as f32) / (qu / nq as f32)).log10()
+                };
+                println!("f {f:6} depth {depth:.1}  loud-quiet in {:.2} out {:.2}", lq(&x), lq(&y));
+            }
+        }
     }
 }

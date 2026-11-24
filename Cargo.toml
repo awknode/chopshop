@@ -1,6 +1,6 @@
 [package]
 name = "chop_shop"
-version = "0.3.2"
+version = "0.4.1"
 edition = "2021"
 authors = ["awk studios"]
 description = "Bass fattening rack: PHAT, OTT, BUZZ, VOWEL, CHAOS, WIDE, CLIP"

@@ -184,6 +184,9 @@ pub struct ChopParams {
     pub os: IntParam,
     #[id = "bypass"]
     pub bypass: BoolParam,
+    /// Window size (1.0 = 100%), saved with the project. 0 = not set: open at the default.
+    #[persist = "ui-scale"]
+    pub ui_scale: Arc<std::sync::RwLock<f32>>,
     /// SAFE: output limiter at -0.1 dBFS (footer switch, on by default).
     #[id = "safe"]
     pub safe: BoolParam,
@@ -222,7 +225,7 @@ impl Default for ChopParams {
             ott_low: db_param("OTT Low", 0.0, -12.0, 12.0),
             ott_mid: db_param("OTT Mid", 0.0, -12.0, 12.0),
             ott_high: db_param("OTT High", 0.0, -12.0, 12.0),
-            ott_amt_low: pct("OTT Low Amount", 0.0),
+            ott_amt_low: pct("OTT Low Amount", 0.5),
             ott_amt_mid: pct("OTT Mid Amount", 1.0),
             ott_amt_high: pct("OTT High Amount", 0.25),
             buzz_on: BoolParam::new("Buzz On", false),
@@ -248,10 +251,10 @@ impl Default for ChopParams {
                 .with_value_to_string(formatters::v2s_f32_rounded(2)),
             chaos_smooth: FloatParam::new("Chaos Smooth", 0.7, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_smoother(SmoothingStyle::Linear(20.0))
-                .with_value_to_string(Arc::new(|v| if v < 0.05 { "STEPS".into() } else if v > 0.95 { "GLIDE".into() } else { format!("{:.0}% GLIDE", v * 100.0) })),
+                .with_value_to_string(Arc::new(|v| if v < 0.05 { "STEPS".into() } else if v > 0.95 { "GLIDE".into() } else { format!("{:.0}%", v * 100.0) })),
             chaos_vowel: pct("Chaos > Vowel", 0.5),
-            chaos_drive: pct("Chaos > Drive", 0.0),
-            chaos_buzz: pct("Chaos > Buzz", 0.0),
+            chaos_drive: pct("Chaos > Drive", 0.6),
+            chaos_buzz: pct("Chaos > Buzz", 0.5),
             chaos_seed: IntParam::new("Chaos Seed", 1, IntRange::Linear { min: 1, max: 999 }),
             wide_on: BoolParam::new("Wide On", true),
             width: FloatParam::new("Width", 1.0, FloatRange::Linear { min: 0.0, max: 2.0 })
@@ -271,6 +274,7 @@ impl Default for ChopParams {
                 .with_value_to_string(Arc::new(|v| awk_ui::OS_NAMES[v.clamp(0, 3) as usize].to_string()))
                 .with_string_to_value(Arc::new(|s| awk_ui::OS_NAMES.iter().position(|n| n.eq_ignore_ascii_case(s.trim())).map(|i| i as i32))),
             bypass: awk_ui::bypass_param(),
+            ui_scale: Arc::new(std::sync::RwLock::new(0.0)),
             safe: awk_ui::safe_param(),
         }
     }
@@ -524,7 +528,7 @@ impl ChopShop {
             // BUZZ / VOWEL follow every sample (only when they actually move):
             // updating them in steps is what made CHAOS crackle.
             if on.buzz {
-                let bf = (bf_s * 2f32.powf(*ch * cb * 2.0)).clamp(100.0, 12000.0);
+                let bf = (bf_s * 2f32.powf(*ch * cb * 3.5)).clamp(80.0, 14000.0);
                 if bf != self.last_bf {
                     for b in self.buzz.iter_mut() {
                         b.set(bf, rate);
@@ -533,7 +537,7 @@ impl ChopShop {
                 }
             }
             if on.vowel {
-                let k = ((vp_s + *ch * cv * 0.5).clamp(0.0, 1.0), vres, vs_s);
+                let k = ((vp_s + *ch * cv).clamp(0.0, 1.0), vres, vs_s);
                 if k != self.last_v {
                     for v in self.vowel.iter_mut() {
                         v.set(k.0, k.1, k.2, rate);
@@ -545,7 +549,8 @@ impl ChopShop {
 
             let v = Vals {
                 in_g: db_to_gain(p.input.smoothed.next()),
-                drive: (p.drive.smoothed.next() + *ch * cd * 12.0).max(0.0),
+                // CHAOS > DRIVE: +-24 dB of PHAT drive, and it pulls the PHAT shifter around too
+                drive: (p.drive.smoothed.next() + *ch * cd * 24.0).max(0.0),
                 color: p.color.smoothed.next(),
                 pm: p.phat_mix.smoothed.next(),
                 pdry: p.ph_dry.smoothed.next(),
@@ -553,7 +558,7 @@ impl ChopShop {
                 pbuzz: p.ph_buzz.smoothed.next(),
                 pdisp: p.ph_disp.smoothed.next(),
                 pdf: p.ph_dfreq.smoothed.next(),
-                pshift: shift_hz(p.ph_shift.smoothed.next()),
+                pshift: shift_hz(p.ph_shift.smoothed.next()) + *ch * cd * 40.0,
                 pxf: p.ph_xf.smoothed.next(),
                 depth: p.depth.smoothed.next(),
                 time: p.time.value(),
@@ -769,6 +774,8 @@ mod tests {
 
 #[cfg(test)]
 mod audit;
+#[cfg(test)]
+mod effect_audit;
 #[cfg(test)]
 mod shot_test;
 

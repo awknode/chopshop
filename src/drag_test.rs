@@ -40,7 +40,7 @@ fn drag_knob(with_strip: bool) -> Vec<String> {
             skin.begin(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
                 if with_strip {
-                    let _ = bar.strip(ui, &setter, &params, ui.max_rect(), &skin, &params.mix, &params.bypass);
+                    let _ = bar.strip(ui, &setter, &params, ui.max_rect(), &skin, &params.mix, &params.bypass, &std::sync::RwLock::new(1.0));
                 }
                 skin.knob(ui, &setter, knob_at, 26.0, "DRIVE", &params.drive, true, false, false);
             });
@@ -86,9 +86,9 @@ fn preset_load_never_blocks() {
         let _ = ctx.run_ui(raw, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let whole = ui.max_rect();
-                let _ = bar.strip(ui, &setter, &params, whole, &skin, &params.mix, &params.bypass);
-                // '>' is the last 22 px of the preset box, which ends 12 px left of SAVE (r-378).
-                next_at = Pos2::new(whole.right() - 401.0, whole.top() + 22.0);
+                let _ = bar.strip(ui, &setter, &params, whole, &skin, &params.mix, &params.bypass, &std::sync::RwLock::new(1.0));
+                // '>' is the last 22 px of the preset box, which ends 12 px left of SAVE (r-434, after the UI-scale chip).
+                next_at = Pos2::new(whole.right() - 457.0, whole.top() + 22.0);
             });
         });
     }
@@ -115,13 +115,13 @@ fn save_as_goes_to_user_and_favourites() {
     let mut bar = PresetBar::new(plugin);
     let w = 960.0f32;
     // SAVE AS chip: r-324 .. r-252, centred on the 44 px header.
-    let save_as = Pos2::new(w - 288.0, 22.0);
+    let save_as = Pos2::new(w - 344.0, 22.0);
     let mut frame = |ev: Vec<Event>, i: usize| {
         let raw = RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(w, 744.0))), time: Some(i as f64 * 0.016), events: ev, ..Default::default() };
         let _ = ctx.run_ui(raw, |ctx| {
             skin.begin(ctx);
             egui::CentralPanel::default().show(ctx, |ui| {
-                let _ = bar.strip(ui, &setter, &params, ui.max_rect(), &skin, &params.mix, &params.bypass);
+                let _ = bar.strip(ui, &setter, &params, ui.max_rect(), &skin, &params.mix, &params.bypass, &std::sync::RwLock::new(1.0));
             });
         });
     };
