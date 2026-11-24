@@ -26,7 +26,7 @@ pub(crate) struct St {
 }
 
 pub(crate) fn new_st(dir: &'static str) -> St {
-    St { presets: PresetBar::new(dir), skin: Skin::new(Look::Blackface, ACC, "CHOPSHOP", env!("CARGO_PKG_VERSION"), ""), an: Analyzer::default() }
+    St { presets: PresetBar::new(dir).with_dice(&["in", "out", "mix", "match", "os", "safe"]), skin: Skin::new(Look::Blackface, ACC, "CHOPSHOP", env!("CARGO_PKG_VERSION"), ""), an: Analyzer::default() }
 }
 
 pub fn create(params: Arc<ChopParams>, shared: Arc<Shared>) -> Option<crate::nice_app::AwkEditor> {
